@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Secret/.env engeli + main'e yalnızca ops commit (GIT-KURALLARI.md §12).
+set -euo pipefail
+source "$(dirname "$0")/_lib.sh"
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+
+# 1) .env dosyaları (örnek şablonlar hariç)
+envs=$(printf '%s\n' "$staged" | grep -E '(^|/)\.env($|\.)' | grep -vE '\.env\.(example|sample|template)$' || true)
+if [[ -n "$envs" ]]; then
+  echo "pre-commit: .env dosyası commit'lenemez:" >&2; echo "$envs" >&2; exit 1
+fi
+
+# 2) Bariz secret desenleri (yalnızca eklenen satırlarda)
+secret_re='(sk-ant-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9]{32,}|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{30,}|xox[baprs]-[A-Za-z0-9-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY-----)'
+hits=$(git diff --cached -U0 | grep -E '^\+' | grep -vE '^\+\+\+ ' | grep -E "$secret_re" || true)
+if [[ -n "$hits" ]]; then
+  echo "pre-commit: secret'a benzeyen içerik bulundu, commit durduruldu." >&2; exit 1
+fi
+
+# 3) main üzerinde yalnızca ops yolları
+branch=$(git symbolic-ref --short -q HEAD || true)
+if [[ "$branch" == "main" ]]; then
+  if bad=$(printf '%s\n' "$staged" | has_non_ops_paths); then
+    echo "pre-commit: main'e yalnızca reports/, memory/, logs/ commit'lenebilir." >&2
+    echo "  ops dışı dosya: $bad — kendi branch'inde çalış ve PR aç (GIT-KURALLARI.md §1, §12)." >&2
+    exit 1
+  fi
+fi

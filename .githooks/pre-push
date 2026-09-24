@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# main'e yalnızca ops-only push; force-push yok (GIT-KURALLARI.md §5, §12).
+set -euo pipefail
+source "$(dirname "$0")/_lib.sh"
+ZERO=0000000000000000000000000000000000000000
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [[ "$remote_ref" != "refs/heads/main" ]] && continue
+  [[ "$local_sha" == "$ZERO" ]] && { echo "pre-push: main silinemez." >&2; exit 1; }
+
+  if [[ "$remote_sha" != "$ZERO" ]]; then
+    if ! git merge-base --is-ancestor "$remote_sha" "$local_sha" 2>/dev/null; then
+      echo "pre-push: main'e force-push yasak." >&2; exit 1
+    fi
+    range="$remote_sha..$local_sha"
+  else
+    range="$local_sha"
+  fi
+
+  files=$(git diff --name-only "$range" 2>/dev/null || git show --name-only --format= "$local_sha")
+  if bad=$(printf '%s\n' "$files" | has_non_ops_paths); then
+    echo "pre-push: main'e doğrudan kod push'u yasak (ops dışı dosya: $bad)." >&2
+    echo "  Branch'e push edip PR aç; merge'ü Tech Lead yapar (GIT-KURALLARI.md §5, §12)." >&2
+    exit 1
+  fi
+done

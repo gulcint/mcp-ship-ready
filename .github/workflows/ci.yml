@@ -1,0 +1,19 @@
+# Müşteri projesi CI'ı. Stack seçilince ilk görevde test/lint/typecheck
+# job'ı eklenir (bkz. CLAUDE.md "İlk Görev"). test-integrity baştan açık.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test-integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: bash scripts/ci/test-integrity.sh "origin/${{ github.base_ref }}"
