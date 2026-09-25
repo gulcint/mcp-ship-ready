@@ -87,13 +87,21 @@ whoever fills out the actual submission form.
 
 Derived from `BRIEF.md`'s "Veri" section (human-approved 2026-09-24/25):
 
-- MCP Ship-Ready only reads files from the target repository the user
-  points it at — a public, open-source MCP connector/server repo the
-  user already has locally. It does not access private/closed repos
-  (out of scope for v1), does not phone home, does not send scanned
-  content anywhere, and has no server component.
-- No personal, financial, or otherwise sensitive data is processed —
-  scope is source code static analysis only.
+- MCP Ship-Ready is designed for public, open-source MCP connector/
+  server repos the user already has locally — private/closed-repo
+  support is out of scope for v1. That's the intended use, not a
+  technical restriction the plugin enforces: it reads whatever local
+  directory path the user gives it, public or private.
+- The plugin makes no network calls and has no server component. It
+  doesn't "phone home." Its output — including file paths and short
+  code excerpts from the target repo (a `fix` preview shows up to 20
+  changed lines, each truncated to 200 characters) — is processed
+  within the user's own Claude Code session, the same way any command
+  output the user runs is.
+- MCP Ship-Ready is designed for source code static analysis of MCP
+  connector/server repos, not for personal or financial data — but,
+  same caveat as above, it reads whatever local directory it's pointed
+  at and doesn't inspect content to check whether that's what's there.
 - No production access of any kind. `fix-apply` writes only to files
   inside the local target directory the user explicitly passed in.
 - The plugin never executes code from the target repository (see
