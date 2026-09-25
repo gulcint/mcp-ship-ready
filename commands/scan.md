@@ -6,19 +6,26 @@ allowed-tools: ["Bash(node --experimental-strip-types \"${CLAUDE_PLUGIN_ROOT}/sr
 
 # MCP Ship-Ready — Scan
 
-Run the compliance scanner against the target repo path given in `$ARGUMENTS`
-(default to `.` if empty). The scanner never executes code from the target
-repo — it only reads files for static analysis.
+Claude Code runs the scanner below automatically while loading this command,
+using its dynamic context injection feature (see the "Inject dynamic
+context" section of
+https://code.claude.com/docs/en/slash-commands#inject-dynamic-context) — it
+is not something you decide to run, and you should not run it again
+yourself via Bash. This makes the exact command that runs deterministic
+regardless of how `$ARGUMENTS` is phrased: Claude Code substitutes
+`$ARGUMENTS` and `${CLAUDE_PLUGIN_ROOT}` into the literal text below and
+executes it itself before this content reaches you, matching it against the
+`allowed-tools` rule above exactly. The scanner only reads files under the
+target path (default `.` if `$ARGUMENTS` is empty) for static analysis — it
+never executes code from the target repo.
 
-Run:
+## Scan result
+!`node --experimental-strip-types "${CLAUDE_PLUGIN_ROOT}/src/cli.ts" scan "$ARGUMENTS"`
 
-```
-node --experimental-strip-types "${CLAUDE_PLUGIN_ROOT}/src/cli.ts" scan "$ARGUMENTS"
-```
-
-Report the command's output to the user as-is. Findings are categorized as
+## Your task
+Report the scan result above to the user as-is. Findings are categorized as
 `mechanical` (safe to auto-fix, coming in task-2026-09-25-0004) or
 `architectural` (report only, requires a human decision) — see
-`docs/spec-rules.md` for the current rule set and its spec sources. A
-non-zero exit means a scan error (bad path/args), not a compliance failure —
-the CLI always exits 0 on a completed scan, regardless of findings.
+`docs/spec-rules.md` for the current rule set and its spec sources. A report
+starting with `PARTIAL SCAN` means a resource limit cut the scan short —
+say so explicitly; don't present "no findings" in that case as compliance.
