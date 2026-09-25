@@ -5,6 +5,8 @@
   "author": {
     "name": "MCP Ship Ready"
   },
+  "homepage": "https://github.com/gulcint/mcp-ship-ready",
+  "repository": "https://github.com/gulcint/mcp-ship-ready",
   "license": "MIT",
   "keywords": [
     "mcp",
