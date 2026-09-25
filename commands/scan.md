@@ -2,6 +2,7 @@
 description: "MCP Ship-Ready: scan a local MCP connector repo for July 2026 spec compliance"
 argument-hint: "<repo-path>"
 allowed-tools: ["Bash(node --experimental-strip-types \"${CLAUDE_PLUGIN_ROOT}/src/cli.ts\" scan:*)"]
+disable-model-invocation: true
 ---
 
 # MCP Ship-Ready — Scan
@@ -17,10 +18,16 @@ regardless of how `$ARGUMENTS` is phrased: Claude Code substitutes
 executes it itself before this content reaches you, matching it against the
 `allowed-tools` rule above exactly. The scanner only reads files under the
 target path (default `.` if `$ARGUMENTS` is empty) for static analysis — it
-never executes code from the target repo.
+never executes code from the target repo. `$ARGUMENTS` is single-quoted
+above (not double-quoted) so a target path can't smuggle shell metacharacters
+(`$()`, backticks, `"`) into the command; only a literal `'` in the path
+would break the quoting, which is an unlikely, loudly-failing edge case, not
+a silent one. This command only runs when you invoke it directly with
+`/mcp-ship-ready:scan` — Claude won't call it on its own mid-conversation
+(`disable-model-invocation: true` above).
 
 ## Scan result
-!`node --experimental-strip-types "${CLAUDE_PLUGIN_ROOT}/src/cli.ts" scan "$ARGUMENTS"`
+!`node --experimental-strip-types "${CLAUDE_PLUGIN_ROOT}/src/cli.ts" scan '$ARGUMENTS'`
 
 ## Your task
 Report the scan result above to the user as-is. Findings are categorized as
