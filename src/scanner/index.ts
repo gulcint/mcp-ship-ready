@@ -53,8 +53,9 @@ export function scan(targetPath: string, limits?: WalkLimits): ScanReport {
   const summary = step.value;
   return {
     target: targetPath,
-    // A partial scan never counts as compliant, even with zero findings so far.
-    compliant: findings.length === 0 && !summary.truncated,
+    // Neither a truncated scan nor one with unread (skipped) paths counts
+    // as compliant, even with zero findings among the files it did read.
+    compliant: findings.length === 0 && !summary.truncated && summary.skippedPaths.length === 0,
     findings,
     partial: summary.truncated,
     partialReason: summary.truncationReason,

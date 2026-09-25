@@ -78,3 +78,17 @@ test("formatReport reports a partial scan and skipped paths", () => {
   assert.match(text, /Skipped 1 unreadable path\(s\)/);
   assert.match(text, /- locked-dir/);
 });
+
+test("formatReport never claims 'no known violations' when a path was skipped, even without truncation", () => {
+  const report: ScanReport = {
+    target: "/tmp/x",
+    compliant: false,
+    findings: [],
+    partial: false,
+    skippedPaths: ["locked-dir"],
+  };
+  const text = formatReport(report);
+
+  assert.match(text, /No findings in the files scanned so far\./);
+  assert.equal(text.includes("no known MCP 2026-07-28 spec violations detected"), false);
+});

@@ -140,8 +140,26 @@ test("scan skips an unreadable directory instead of crashing (EACCES)", () => {
     assert.equal(report.findings.length, 1); // only the readable file
     assert.equal(report.findings[0]?.file, "readable.ts");
     assert.ok(report.skippedPaths.some((p) => p.includes("locked")));
+    assert.equal(report.compliant, false); // a skipped path means we can't claim compliance
   } finally {
     chmodSync(lockedDir, 0o755); // restore permissions so rmSync can clean up
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("scan skips an unreadable target root instead of crashing (EACCES)", () => {
+  const root = mkdtempSync(path.join(tmpdir(), "mcp-ship-ready-eacces-root-"));
+  try {
+    writeFileSync(path.join(root, "a.ts"), 'const x = "-32002";');
+    chmodSync(root, 0o000);
+
+    const report = scan(root);
+
+    assert.deepEqual(report.findings, []);
+    assert.ok(report.skippedPaths.length > 0);
+    assert.equal(report.compliant, false);
+  } finally {
+    chmodSync(root, 0o755); // restore permissions so rmSync can clean up
     rmSync(root, { recursive: true, force: true });
   }
 });

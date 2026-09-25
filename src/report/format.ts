@@ -33,7 +33,7 @@ export function formatReport(report: ScanReport): string {
 
   if (report.findings.length === 0) {
     lines.push(
-      report.partial
+      report.partial || report.skippedPaths.length > 0
         ? "No findings in the files scanned so far."
         : "No findings — no known MCP 2026-07-28 spec violations detected (see docs/spec-rules.md).",
     );
