@@ -50,7 +50,7 @@ export function formatFixPreview(plan: FixPlan): string {
 export function formatApplyResult(result: ApplyResult): string {
   const lines = [`MCP Ship-Ready fix apply: ${escapeControlChars(result.target)}`];
 
-  if (result.written.length === 0 && result.fixes.length === 0) {
+  if (result.written.length === 0 && result.fixes.length === 0 && result.refusedUnsafe.length === 0) {
     lines.push("No mechanical fixes available. Nothing was written.");
   } else {
     lines.push(`Wrote ${result.written.length} file(s):`);

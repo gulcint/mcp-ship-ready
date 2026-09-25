@@ -138,3 +138,28 @@ test("fix preview reports a non-UTF-8 file as refused instead of silently droppi
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("fix-apply reports a non-UTF-8 file as refused instead of silently dropping it", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "mcp-ship-ready-cli-apply-refused-"));
+  try {
+    mkdirSync(path.join(dir, "src"), { recursive: true });
+    const target = path.join(dir, "src", "server.py");
+    const originalBuf = Buffer.concat([Buffer.from("# caf"), Buffer.from([0xe9]), Buffer.from("\ncode = -32002\n")]);
+    writeFileSync(target, originalBuf);
+
+    const { stdout } = await execFileAsync("node", [
+      "--experimental-strip-types",
+      cliPath,
+      "fix-apply",
+      dir,
+    ]);
+
+    assert.match(stdout, /Wrote 0 file\(s\)/);
+    assert.match(stdout, /Refused to write 1 file\(s\) for safety/);
+    assert.match(stdout, /not valid UTF-8/);
+    assert.equal(stdout.includes("No mechanical fixes available"), false);
+    assert.deepEqual(readFileSync(target), originalBuf); // untouched
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
