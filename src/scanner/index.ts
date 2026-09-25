@@ -1,4 +1,7 @@
-export type FindingCategory = "mechanical" | "architectural";
+import { collectScannableFiles } from "./walk.ts";
+import { rules, type FindingCategory } from "./rules.ts";
+
+export type { FindingCategory };
 
 export interface Finding {
   ruleId: string;
@@ -15,10 +18,27 @@ export interface ScanReport {
 }
 
 /**
- * v1 skeleton: the July 2026 MCP spec rule set is derived and wired up in
- * task-2026-09-25-0003. This stub proves the CLI -> scanner -> report
- * pipeline runs end to end without guessing at rule content.
+ * Static-analysis-only scan: reads text files under `targetPath` and matches
+ * them against the MCP 2026-07-28 spec rule set (see src/scanner/rules.ts).
+ * Never executes anything from the target repo.
  */
 export function scan(targetPath: string): ScanReport {
-  return { target: targetPath, compliant: true, findings: [] };
+  const files = collectScannableFiles(targetPath);
+  const findings: Finding[] = [];
+
+  for (const file of files) {
+    for (const rule of rules) {
+      for (const match of rule.detect(file.content)) {
+        findings.push({
+          ruleId: rule.id,
+          file: file.relativePath,
+          line: match.line,
+          category: rule.category,
+          message: match.message,
+        });
+      }
+    }
+  }
+
+  return { target: targetPath, compliant: findings.length === 0, findings };
 }

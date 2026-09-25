@@ -1,7 +1,7 @@
 ---
 description: "MCP Ship-Ready: scan a local MCP connector repo for July 2026 spec compliance"
 argument-hint: "<repo-path>"
-allowed-tools: ["Bash(node --experimental-strip-types ${CLAUDE_PLUGIN_ROOT}/src/cli.ts scan:*)"]
+allowed-tools: ["Bash(node --experimental-strip-types \"${CLAUDE_PLUGIN_ROOT}/src/cli.ts\" scan:*)"]
 ---
 
 # MCP Ship-Ready — Scan
@@ -16,6 +16,9 @@ Run:
 node --experimental-strip-types "${CLAUDE_PLUGIN_ROOT}/src/cli.ts" scan "$ARGUMENTS"
 ```
 
-Report the command's output to the user as-is. If it exits non-zero, explain
-that as a scan error, not necessarily a compliance failure (v1 skeleton:
-mechanical/architectural rule categories land in a follow-up task).
+Report the command's output to the user as-is. Findings are categorized as
+`mechanical` (safe to auto-fix, coming in task-2026-09-25-0004) or
+`architectural` (report only, requires a human decision) — see
+`docs/spec-rules.md` for the current rule set and its spec sources. A
+non-zero exit means a scan error (bad path/args), not a compliance failure —
+the CLI always exits 0 on a completed scan, regardless of findings.
