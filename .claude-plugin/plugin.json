@@ -1,0 +1,15 @@
+{
+  "name": "mcp-ship-ready",
+  "version": "0.1.0",
+  "description": "Checks a public Claude MCP connector repo (TypeScript or Python) against the July 2026 MCP spec change before Anthropic Community Directory submission.",
+  "author": {
+    "name": "MCP Ship Ready"
+  },
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "compliance",
+    "community-directory",
+    "static-analysis"
+  ]
+}

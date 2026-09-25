@@ -1,0 +1,25 @@
+{
+  "name": "mcp-ship-ready",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Claude Code plugin: checks MCP connector repos for July 2026 MCP spec compliance before Community Directory submission.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.6.0"
+  },
+  "scripts": {
+    "cli": "node --experimental-strip-types src/cli.ts",
+    "test": "node --experimental-strip-types --test",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src tests",
+    "check": "npm run typecheck && npm run lint && npm test"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.2",
+    "eslint": "^10.11.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.70.1"
+  }
+}

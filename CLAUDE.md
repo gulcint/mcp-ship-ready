@@ -39,3 +39,27 @@ Stack BRIEF'e göre seçildikten sonra ilk görev:
 - `.github/workflows/ci.yml`'a stack'in test/lint/typecheck job'ı eklenir
   (şu an yalnızca `test-integrity` var).
 - Bu dosyanın altına "Komutlar" bölümü eklenir (kurulum, test, çalıştırma).
+
+## Stack Kararı (task-2026-09-25-0002)
+TypeScript, Node'un native type-stripping desteğiyle (`node
+--experimental-strip-types`, Node >=22.6.0) build adımı olmadan doğrudan
+çalıştırılır. Gerekçe: sıfır çalışma-zamanı bağımlılığı (CLI arg parse
+için `node:util` `parseArgs`, test için `node:test` — ikisi de Node
+çekirdeğinde), bu da Claude Code plugin olarak dağıtımı basitleştirir
+(kullanıcı `npm install` çalıştırmadan `/mcp-ship-ready:scan` komutunu
+kullanabilir). Hedef tarama dili (TS/Python connector repoları) ile
+plugin'in kendi implementasyon dili bağımsızdır (ticket'ta izin verilen
+karar). devDependency'ler (`typescript`, `eslint`, `typescript-eslint`)
+yalnızca geliştirme/CI zamanında gerekir.
+
+## Komutlar
+```bash
+npm install         # devDependencies (typescript, eslint, typescript-eslint)
+npm run typecheck   # tsc --noEmit
+npm run lint        # eslint src tests
+npm test            # node --experimental-strip-types --test
+npm run check       # yukarıdaki üçü sırayla
+npm run cli -- scan <repo-path>   # CLI'ı doğrudan çalıştır
+
+claude plugin validate .          # plugin.json + komut/skill doğrulaması
+```

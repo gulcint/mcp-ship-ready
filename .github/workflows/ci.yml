@@ -1,5 +1,6 @@
-# Müşteri projesi CI'ı. Stack seçilince ilk görevde test/lint/typecheck
-# job'ı eklenir (bkz. CLAUDE.md "İlk Görev"). test-integrity baştan açık.
+# Müşteri projesi CI'ı. Stack seçildi: TypeScript (Node native type-stripping,
+# bkz. task-2026-09-25-0002 Plan). test-integrity baştan açık, node job'ı
+# izole eklendi — birbirine dokunmaz.
 name: CI
 
 on:
@@ -17,3 +18,17 @@ jobs:
         with:
           fetch-depth: 0
       - run: bash scripts/ci/test-integrity.sh "origin/${{ github.base_ref }}"
+
+  node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm install -g @anthropic-ai/claude-code@2.1.282
+      - run: claude plugin validate .
