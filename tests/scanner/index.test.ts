@@ -55,6 +55,14 @@ test("scan applies the same rule set to a Python repo", () => {
   }
 });
 
+test("scan does not flag -32002 embedded in a larger numeric token, only the isolated code", () => {
+  const report = scan(path.join(fixturesDir, "ts-token-boundary"));
+
+  assert.equal(report.findings.length, 1); // only theDeprecatedCode's isolated -32002
+  assert.equal(report.findings[0]?.ruleId, "mcp-2026-mech-error-code-32002");
+  assert.equal(report.findings[0]?.line, 10); // the isolated `code: -32002` line
+});
+
 test("every finding includes rule id, file, line, category and a human-readable message", () => {
   const report = scan(path.join(fixturesDir, "python-mixed"));
 
