@@ -13,23 +13,22 @@ Community Directory.
 
 ## Status
 
-v1 skeleton (this repo). The plugin, CLI, and CI pipeline run end to end,
-but the actual MCP spec rule engine is not implemented yet — `scan` always
-reports zero findings. The rule engine, auto-fix for mechanical findings,
-and Community Directory submission manifest generation land in follow-up
-tasks (`tasks/task-2026-09-25-0003.md`, `0004`, `0005`).
+v1 rule set (this repo). The plugin, CLI, CI pipeline, and a starting MCP
+2026-07-28 spec rule set (see `docs/spec-rules.md`) run end to end. It is
+not an exhaustive rendering of every spec change — auto-fix for mechanical
+findings and Community Directory submission manifest generation land in
+follow-up tasks (`tasks/task-2026-09-25-0004.md`, `0005`).
 
-## What it checks (planned, not yet implemented)
+## What it checks
 
-- Removal of `session/initialize`.
-- Stateless architecture requirements (reported only — not auto-fixed).
-- Auth migration from DCR to CIMD.
-- Deprecated fields/patterns still in use during the 12-month deprecation
-  window.
+- The removed `initialize`/`notifications/initialized` session handshake.
+- OAuth Dynamic Client Registration usage (deprecated in favor of CIMD).
+- A deprecated JSON-RPC error code renumbered in the 2026-07-28 spec.
 
-Every finding is categorized as either **mechanical** (safe to auto-fix,
-e.g. field renames) or **architectural** (reported only, requires a human
-decision — e.g. moving to a stateless architecture).
+See `docs/spec-rules.md` for the full rule list, each with its exact spec
+source. Every finding is categorized as either **mechanical** (safe to
+auto-fix, e.g. the error code rename) or **architectural** (reported only,
+requires a human decision — e.g. moving to a stateless architecture).
 
 ## Install (as a Claude Code plugin)
 

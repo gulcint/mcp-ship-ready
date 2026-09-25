@@ -4,9 +4,7 @@ export function formatReport(report: ScanReport): string {
   const lines: string[] = [`MCP Ship-Ready scan: ${report.target}`];
 
   if (report.findings.length === 0) {
-    lines.push(
-      "No findings (rule engine not implemented yet — see task-2026-09-25-0003).",
-    );
+    lines.push("No findings — no known MCP 2026-07-28 spec violations detected (see docs/spec-rules.md).");
     return lines.join("\n");
   }
 
