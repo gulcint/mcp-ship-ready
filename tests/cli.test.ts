@@ -2,10 +2,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 
 const execFileAsync = promisify(execFile);
 const cliPath = path.join(import.meta.dirname, "..", "src", "cli.ts");
+const fixerFixturesDir = path.join(import.meta.dirname, "fixer", "fixtures");
 
 test("scan command runs end to end against this repo and exits 0", async () => {
   const { stdout } = await execFileAsync("node", [
@@ -41,4 +44,122 @@ test("missing path exits with code 2", async () => {
       return true;
     },
   );
+});
+
+test("fix previews a mechanical finding without writing to disk", async () => {
+  const dir = path.join(fixerFixturesDir, "mechanical-only");
+  const before = readFileSync(path.join(dir, "src", "server.ts"), "utf8");
+
+  const { stdout } = await execFileAsync("node", ["--experimental-strip-types", cliPath, "fix", dir]);
+
+  assert.match(stdout, /MCP Ship-Ready fix preview/);
+  assert.match(stdout, /-32002/);
+  assert.match(stdout, /-32602/);
+  assert.match(stdout, /Nothing has been written/);
+  assert.equal(readFileSync(path.join(dir, "src", "server.ts"), "utf8"), before); // untouched
+});
+
+test("fix fails closed on an --apply-style extra argument instead of applying anything", async () => {
+  const dir = path.join(fixerFixturesDir, "mechanical-only");
+  const before = readFileSync(path.join(dir, "src", "server.ts"), "utf8");
+
+  // Simulates the extra shell word a crafted $ARGUMENTS quote-breakout
+  // could smuggle in (see commands/fix.md). `fix` has no flag parsing for
+  // "apply" at all — node:util's parseArgs rejects any unrecognized
+  // option outright (strict by default), so this throws before any fs
+  // write is reached. Failing loudly here is the safe outcome, not a bug.
+  await assert.rejects(
+    execFileAsync("node", ["--experimental-strip-types", cliPath, "fix", dir, "--apply"]),
+  );
+
+  assert.equal(readFileSync(path.join(dir, "src", "server.ts"), "utf8"), before); // untouched
+});
+
+test("fix-apply writes the mechanical fix, and a re-scan no longer reports it", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "mcp-ship-ready-cli-fixapply-"));
+  try {
+    cpSync(path.join(fixerFixturesDir, "mechanical-only"), dir, { recursive: true });
+
+    const { stdout } = await execFileAsync("node", [
+      "--experimental-strip-types",
+      cliPath,
+      "fix-apply",
+      dir,
+    ]);
+
+    assert.match(stdout, /MCP Ship-Ready fix apply/);
+    assert.match(stdout, /Wrote 1 file\(s\)/);
+
+    const fixedContent = readFileSync(path.join(dir, "src", "server.ts"), "utf8");
+    assert.match(fixedContent, /-32602/);
+    assert.equal(fixedContent.includes("-32002"), false);
+
+    const rescan = await execFileAsync("node", ["--experimental-strip-types", cliPath, "scan", dir]);
+    assert.match(rescan.stdout, /No findings/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("fix-apply never writes an architectural-only fixture", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "mcp-ship-ready-cli-fixapply-arch-"));
+  try {
+    cpSync(path.join(fixerFixturesDir, "architectural-only"), dir, { recursive: true });
+    const before = readFileSync(path.join(dir, "src", "server.ts"), "utf8");
+
+    const { stdout } = await execFileAsync("node", [
+      "--experimental-strip-types",
+      cliPath,
+      "fix-apply",
+      dir,
+    ]);
+
+    assert.match(stdout, /No mechanical fixes available/);
+    assert.equal(readFileSync(path.join(dir, "src", "server.ts"), "utf8"), before);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("fix preview reports a non-UTF-8 file as refused instead of silently dropping it", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "mcp-ship-ready-cli-refused-"));
+  try {
+    mkdirSync(path.join(dir, "src"), { recursive: true });
+    const target = path.join(dir, "src", "server.ts");
+    const originalBuf = Buffer.concat([Buffer.from("const x = { code: -32002 };"), Buffer.from([0xe9])]);
+    writeFileSync(target, originalBuf);
+
+    const { stdout } = await execFileAsync("node", ["--experimental-strip-types", cliPath, "fix", dir]);
+
+    assert.match(stdout, /Refused to touch 1 file\(s\) for safety/);
+    assert.match(stdout, /not valid UTF-8/);
+    assert.deepEqual(readFileSync(target), originalBuf); // untouched
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("fix-apply reports a non-UTF-8 file as refused instead of silently dropping it", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "mcp-ship-ready-cli-apply-refused-"));
+  try {
+    mkdirSync(path.join(dir, "src"), { recursive: true });
+    const target = path.join(dir, "src", "server.py");
+    const originalBuf = Buffer.concat([Buffer.from("# caf"), Buffer.from([0xe9]), Buffer.from("\ncode = -32002\n")]);
+    writeFileSync(target, originalBuf);
+
+    const { stdout } = await execFileAsync("node", [
+      "--experimental-strip-types",
+      cliPath,
+      "fix-apply",
+      dir,
+    ]);
+
+    assert.match(stdout, /Wrote 0 file\(s\)/);
+    assert.match(stdout, /Refused to write 1 file\(s\) for safety/);
+    assert.match(stdout, /not valid UTF-8/);
+    assert.equal(stdout.includes("No mechanical fixes available"), false);
+    assert.deepEqual(readFileSync(target), originalBuf); // untouched
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

@@ -11,11 +11,13 @@ import type { ScanReport } from "../scanner/index.ts";
  * Claude "as-is". Ordinary paths, including non-ASCII letters (ş, ü, CJK),
  * pass through unchanged. Known tradeoff: \p{Cf} also escapes ZWJ
  * (U+200D), so an emoji-sequence path gets escaped too — accepted, see
- * tests/report/format.test.ts.
+ * tests/report/format.test.ts. Exported so src/fixer/format.ts, which
+ * prints the same kind of untrusted target-repo paths, uses this exact
+ * function instead of a second copy that could drift out of sync.
  */
 const CONTROL_CHARS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu;
 
-function escapeControlChars(value: string): string {
+export function escapeControlChars(value: string): string {
   return value.replace(CONTROL_CHARS, (ch) => `\\x${ch.codePointAt(0)!.toString(16).padStart(2, "0")}`);
 }
 
