@@ -1,4 +1,4 @@
-import { chmodSync, lstatSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
+import { chmodSync, lstatSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
 import path from "node:path";
 import type { ScanReport } from "../scanner/index.ts";
@@ -80,7 +80,9 @@ function fixContent(content: string): string {
  * rather than the process's default/umask mode. `chmodSync` afterward is
  * kept anyway: the `mode` open option is still subject to umask, so it
  * alone can't guarantee the original file's exact permission bits survive;
- * the explicit chmod does, regardless of umask.
+ * the explicit chmod does, regardless of umask. If chmod or rename fails
+ * after the temp file was created, it's removed rather than left behind
+ * in the target repo.
  */
 function writeAtomically(absPath: string, content: string, mode: number): void {
   const tmpPath = path.join(
@@ -88,8 +90,17 @@ function writeAtomically(absPath: string, content: string, mode: number): void {
     `.${path.basename(absPath)}.mcp-ship-ready-${randomBytes(6).toString("hex")}.tmp`,
   );
   writeFileSync(tmpPath, content, { encoding: "utf8", flag: "wx", mode });
-  chmodSync(tmpPath, mode);
-  renameSync(tmpPath, absPath);
+  try {
+    chmodSync(tmpPath, mode);
+    renameSync(tmpPath, absPath);
+  } catch (err) {
+    try {
+      unlinkSync(tmpPath);
+    } catch {
+      // best effort — surface the original error either way
+    }
+    throw err;
+  }
 }
 
 /**
@@ -198,7 +209,10 @@ export function applyFixes(plan: FixPlan): ApplyResult {
       writeAtomically(path.join(dirReal, path.basename(absPath)), fixContent(current), stat.mode & 0o777);
       written.push(fix.file);
     } catch (err) {
-      refusedUnsafe.push({ file: fix.file, reason: `write failed: ${(err as Error).message}` });
+      // Use err.code, not err.message: Node's fs error messages embed the
+      // full path (including the untrusted file name) we're writing to.
+      const code = (err as NodeJS.ErrnoException).code ?? "unknown error";
+      refusedUnsafe.push({ file: fix.file, reason: `write failed: ${code}` });
     }
   }
 

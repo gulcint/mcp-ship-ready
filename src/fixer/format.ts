@@ -11,10 +11,17 @@ const MAX_LINE_CHARS = 200;
 /** Caps how many individual line changes are listed before summarizing the rest. */
 const MAX_CHANGES_SHOWN = 20;
 
+/** Pulls the cut point back by one if it would split a UTF-16 surrogate pair. */
+function safeCutIndex(raw: string, maxChars: number): number {
+  const code = raw.charCodeAt(maxChars - 1);
+  return code >= 0xd800 && code <= 0xdbff ? maxChars - 1 : maxChars;
+}
+
 function truncateAndEscape(raw: string): string {
   if (raw.length <= MAX_LINE_CHARS) return escapeControlChars(raw);
-  const remaining = raw.length - MAX_LINE_CHARS;
-  return `${escapeControlChars(raw.slice(0, MAX_LINE_CHARS))}…(+${remaining} chars)`;
+  const cut = safeCutIndex(raw, MAX_LINE_CHARS);
+  const remaining = raw.length - cut;
+  return `${escapeControlChars(raw.slice(0, cut))}…(+${remaining} chars)`;
 }
 
 function formatFixList(fixes: FileFix[]): string[] {
@@ -45,7 +52,7 @@ function formatFixList(fixes: FileFix[]): string[] {
 function formatRefusedUnsafe(refusedUnsafe: FixPlan["refusedUnsafe"], verb: "touch" | "write"): string[] {
   if (refusedUnsafe.length === 0) return [];
   const lines = [`Refused to ${verb} ${refusedUnsafe.length} file(s) for safety:`];
-  for (const r of refusedUnsafe) lines.push(`  - ${escapeControlChars(r.file)}: ${r.reason}`);
+  for (const r of refusedUnsafe) lines.push(`  - ${escapeControlChars(r.file)}: ${escapeControlChars(r.reason)}`);
   return lines;
 }
 

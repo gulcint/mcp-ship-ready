@@ -34,6 +34,21 @@ test("formatFixPreview never truncates in the middle of an escape sequence", () 
   assert.equal(text.includes("\x1b"), false); // never raw
 });
 
+test("formatFixPreview never splits a UTF-16 surrogate pair at the cut point", () => {
+  // "𝒳" (U+1D4B3) is a surrogate pair straddling index 199/200 — a naive
+  // slice(0, 200) would keep the lone high surrogate and drop its pair.
+  const before = "a".repeat(199) + "𝒳" + "b".repeat(50);
+  const plan = basePlan([fix("src/server.ts", [{ line: 1, before, after: before }])]);
+
+  const text = formatFixPreview(plan);
+
+  // No lone/unpaired surrogate anywhere in the output.
+  for (const ch of text) {
+    const code = ch.codePointAt(0)!;
+    assert.equal(code >= 0xd800 && code <= 0xdfff, false, `found a lone surrogate: U+${code.toString(16)}`);
+  }
+});
+
 test("formatFixPreview leaves short lines (under 200 chars) unchanged", () => {
   const before = "const x = -32002;";
   const plan = basePlan([fix("src/server.ts", [{ line: 3, before, after: "const x = -32602;" }])]);
