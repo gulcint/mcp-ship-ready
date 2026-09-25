@@ -31,7 +31,8 @@ a silent one. This command only runs when you invoke it directly with
 
 ## Your task
 Report the scan result above to the user as-is. Findings are categorized as
-`mechanical` (safe to auto-fix, coming in task-2026-09-25-0004) or
+`mechanical` (auto-fixable — tell the user to run `/mcp-ship-ready:fix` to
+preview a fix, or `/mcp-ship-ready:fix-apply` to apply it) or
 `architectural` (report only, requires a human decision) — see
 `docs/spec-rules.md` for the current rule set and its spec sources. A report
 starting with `PARTIAL SCAN` means a resource limit cut the scan short —

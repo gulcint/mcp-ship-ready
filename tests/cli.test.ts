@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { cpSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -116,6 +116,24 @@ test("fix-apply never writes an architectural-only fixture", async () => {
 
     assert.match(stdout, /No mechanical fixes available/);
     assert.equal(readFileSync(path.join(dir, "src", "server.ts"), "utf8"), before);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("fix preview reports a non-UTF-8 file as refused instead of silently dropping it", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "mcp-ship-ready-cli-refused-"));
+  try {
+    mkdirSync(path.join(dir, "src"), { recursive: true });
+    const target = path.join(dir, "src", "server.ts");
+    const originalBuf = Buffer.concat([Buffer.from("const x = { code: -32002 };"), Buffer.from([0xe9])]);
+    writeFileSync(target, originalBuf);
+
+    const { stdout } = await execFileAsync("node", ["--experimental-strip-types", cliPath, "fix", dir]);
+
+    assert.match(stdout, /Refused to touch 1 file\(s\) for safety/);
+    assert.match(stdout, /not valid UTF-8/);
+    assert.deepEqual(readFileSync(target), originalBuf); // untouched
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
