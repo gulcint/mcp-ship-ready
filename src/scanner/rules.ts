@@ -25,6 +25,31 @@ function findLiteral(content: string, literal: string, message: string): RuleMat
   return matches;
 }
 
+/**
+ * Digit/dot-boundary-aware pattern for a numeric literal (e.g. an error
+ * code): won't match inside a larger token like "-320021", "1-32002" or
+ * "-32002.5". Fixed-width lookaround, no backtracking — safe on untrusted
+ * input. Exported so src/fixer/rules.ts's matching fix uses this exact
+ * pattern too, instead of a second hand-written copy that could drift out
+ * of sync with what detection actually flags.
+ */
+export function numericTokenPattern(literal: string): RegExp {
+  return new RegExp(`(?<![\\d.])${literal}(?![\\d.])`, "g");
+}
+
+function findNumericToken(content: string, literal: string, message: string): RuleMatch[] {
+  const pattern = numericTokenPattern(literal);
+  const matches: RuleMatch[] = [];
+  const lines = content.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    if (pattern.test(lines[i])) {
+      matches.push({ line: i + 1, message });
+    }
+    pattern.lastIndex = 0;
+  }
+  return matches;
+}
+
 export const rules: Rule[] = [
   {
     id: "mcp-2026-mech-error-code-32002",
@@ -33,7 +58,7 @@ export const rules: Rule[] = [
       "changelog.mdx, Minor changes #6 (docs/specification/2026-07-28/changelog.mdx): " +
       "resource-not-found error code -32002 renumbered to -32602 (JSON-RPC Invalid Params).",
     detect: (content) =>
-      findLiteral(
+      findNumericToken(
         content,
         "-32002",
         "Deprecated JSON-RPC error code -32002 (resource not found). The 2026-07-28 spec " +
