@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cpSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -173,6 +173,63 @@ test("applyFixes never writes through a symlink, even one that resolves inside t
     assert.equal(result.refusedUnsafe[0]?.file, path.join("src", "linked.ts"));
     assert.match(result.refusedUnsafe[0]?.reason ?? "", /symlink/);
     assert.equal(readFileSync(realTarget, "utf8"), beforeReal); // untouched
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("applyFixes preserves the original file's permission bits", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "mcp-ship-ready-fixer-mode-"));
+  try {
+    cpSync(path.join(fixturesDir, "mechanical-only"), dir, { recursive: true });
+    const target = path.join(dir, "src", "server.ts");
+    chmodSync(target, 0o755);
+
+    applyFixes(planFixes(scan(dir), dir));
+
+    assert.equal(statSync(target).mode & 0o777, 0o755);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("planFixes and applyFixes refuse a file that is not valid UTF-8, instead of corrupting it", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "mcp-ship-ready-fixer-utf8-"));
+  try {
+    mkdirSync(path.join(dir, "src"), { recursive: true });
+    const target = path.join(dir, "src", "server.ts");
+    // A trailing lone byte (0xe9) that is not valid UTF-8 on its own.
+    const originalBuf = Buffer.concat([Buffer.from("const x = { code: -32002 }; // caf"), Buffer.from([0xe9])]);
+    writeFileSync(target, originalBuf);
+
+    const plan = planFixes(scan(dir), dir);
+
+    assert.deepEqual(plan.fixes, []); // never proposed as fixable
+    assert.equal(plan.refusedUnsafe.length, 1);
+    assert.equal(plan.refusedUnsafe[0]?.file, path.join("src", "server.ts"));
+    assert.match(plan.refusedUnsafe[0]?.reason ?? "", /UTF-8/);
+    assert.deepEqual(readFileSync(target), originalBuf); // untouched, byte for byte
+
+    // Defense in depth: even a hand-built plan pointing at this file must be refused at apply time.
+    const handBuiltPlan = {
+      target: dir,
+      applied: false,
+      architecturalSkipped: [],
+      refusedUnsafe: [],
+      fixes: [
+        {
+          file: path.join("src", "server.ts"),
+          ruleIds: ["mcp-2026-mech-error-code-32002"],
+          changes: [],
+          beforeHash: "irrelevant-because-utf8-check-runs-first",
+        },
+      ],
+    };
+    const applied = applyFixes(handBuiltPlan);
+
+    assert.deepEqual(applied.written, []);
+    assert.equal(applied.refusedUnsafe.some((r) => /UTF-8/.test(r.reason)), true);
+    assert.deepEqual(readFileSync(target), originalBuf); // still untouched
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

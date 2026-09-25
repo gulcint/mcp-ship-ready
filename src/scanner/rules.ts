@@ -26,14 +26,19 @@ function findLiteral(content: string, literal: string, message: string): RuleMat
 }
 
 /**
- * Digit/dot-boundary-aware search for a numeric literal (e.g. an error
+ * Digit/dot-boundary-aware pattern for a numeric literal (e.g. an error
  * code): won't match inside a larger token like "-320021", "1-32002" or
  * "-32002.5". Fixed-width lookaround, no backtracking — safe on untrusted
- * input. src/fixer/rules.ts uses the same pattern for the matching fix, so
- * detection and auto-fix never disagree about what counts as a match.
+ * input. Exported so src/fixer/rules.ts's matching fix uses this exact
+ * pattern too, instead of a second hand-written copy that could drift out
+ * of sync with what detection actually flags.
  */
+export function numericTokenPattern(literal: string): RegExp {
+  return new RegExp(`(?<![\\d.])${literal}(?![\\d.])`, "g");
+}
+
 function findNumericToken(content: string, literal: string, message: string): RuleMatch[] {
-  const pattern = new RegExp(`(?<![\\d.])${literal}(?![\\d.])`, "g");
+  const pattern = numericTokenPattern(literal);
   const matches: RuleMatch[] = [];
   const lines = content.split("\n");
   for (let i = 0; i < lines.length; i++) {
