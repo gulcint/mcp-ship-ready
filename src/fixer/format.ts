@@ -1,10 +1,58 @@
 import { escapeControlChars } from "../report/format.ts";
-import type { ApplyResult, FixPlan } from "./index.ts";
+import type { ApplyResult, FileFix, FixPlan } from "./index.ts";
+
+/**
+ * Bounds how much untrusted target-repo content (a changed line's before/
+ * after text) reaches the caller. Truncation runs on the RAW string before
+ * escaping, not after: escaping never runs on anything past the cut point,
+ * so it can never produce a truncated/dangling `\xNN` escape token.
+ */
+const MAX_LINE_CHARS = 200;
+/** Caps how many individual line changes are listed before summarizing the rest. */
+const MAX_CHANGES_SHOWN = 20;
+
+/** Pulls the cut point back by one if it would split a UTF-16 surrogate pair. */
+function safeCutIndex(raw: string, maxChars: number): number {
+  const code = raw.charCodeAt(maxChars - 1);
+  return code >= 0xd800 && code <= 0xdbff ? maxChars - 1 : maxChars;
+}
+
+function truncateAndEscape(raw: string): string {
+  if (raw.length <= MAX_LINE_CHARS) return escapeControlChars(raw);
+  const cut = safeCutIndex(raw, MAX_LINE_CHARS);
+  const remaining = raw.length - cut;
+  return `${escapeControlChars(raw.slice(0, cut))}…(+${remaining} chars)`;
+}
+
+function formatFixList(fixes: FileFix[]): string[] {
+  const lines: string[] = [];
+  const totalChanges = fixes.reduce((n, f) => n + f.changes.length, 0);
+  let changesShown = 0;
+
+  outer: for (const fix of fixes) {
+    let headerPrinted = false;
+    for (const change of fix.changes) {
+      if (changesShown >= MAX_CHANGES_SHOWN) break outer;
+      if (!headerPrinted) {
+        lines.push(`  ${escapeControlChars(fix.file)} (${fix.ruleIds.join(", ")}):`);
+        headerPrinted = true;
+      }
+      lines.push(`    - line ${change.line}: ${truncateAndEscape(change.before)}`);
+      lines.push(`    + line ${change.line}: ${truncateAndEscape(change.after)}`);
+      changesShown++;
+    }
+  }
+
+  if (changesShown < totalChanges) {
+    lines.push(`… and ${totalChanges - changesShown} more change(s), not shown.`);
+  }
+  return lines;
+}
 
 function formatRefusedUnsafe(refusedUnsafe: FixPlan["refusedUnsafe"], verb: "touch" | "write"): string[] {
   if (refusedUnsafe.length === 0) return [];
   const lines = [`Refused to ${verb} ${refusedUnsafe.length} file(s) for safety:`];
-  for (const r of refusedUnsafe) lines.push(`  - ${escapeControlChars(r.file)}: ${r.reason}`);
+  for (const r of refusedUnsafe) lines.push(`  - ${escapeControlChars(r.file)}: ${escapeControlChars(r.reason)}`);
   return lines;
 }
 
@@ -26,13 +74,7 @@ export function formatFixPreview(plan: FixPlan): string {
     lines.push("No mechanical fixes available.");
   } else {
     lines.push(`${plan.fixes.length} file(s) would be changed:`);
-    for (const fix of plan.fixes) {
-      lines.push(`  ${escapeControlChars(fix.file)} (${fix.ruleIds.join(", ")}):`);
-      for (const change of fix.changes) {
-        lines.push(`    - line ${change.line}: ${escapeControlChars(change.before)}`);
-        lines.push(`    + line ${change.line}: ${escapeControlChars(change.after)}`);
-      }
-    }
+    lines.push(...formatFixList(plan.fixes));
     lines.push(
       "Nothing has been written. Run /mcp-ship-ready:fix-apply on the same path to apply these changes.",
     );

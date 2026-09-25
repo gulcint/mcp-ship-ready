@@ -1,4 +1,4 @@
-import { chmodSync, lstatSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
+import { chmodSync, lstatSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
 import path from "node:path";
 import type { ScanReport } from "../scanner/index.ts";
@@ -72,15 +72,35 @@ function fixContent(content: string): string {
   return Object.values(FIXERS).reduce((current, fix) => fix(current), content);
 }
 
-/** Same-directory temp file + rename — atomic on POSIX, never a partial write. Preserves the original file's permission bits. */
+/**
+ * Same-directory temp file + rename — atomic on POSIX, never a partial
+ * write. `flag: "wx"` creates the temp file exclusively: it refuses to
+ * open (throws EEXIST) if anything — a regular file or a symlink — already
+ * exists at that path, and creates it with the right mode from the start
+ * rather than the process's default/umask mode. `chmodSync` afterward is
+ * kept anyway: the `mode` open option is still subject to umask, so it
+ * alone can't guarantee the original file's exact permission bits survive;
+ * the explicit chmod does, regardless of umask. If chmod or rename fails
+ * after the temp file was created, it's removed rather than left behind
+ * in the target repo.
+ */
 function writeAtomically(absPath: string, content: string, mode: number): void {
   const tmpPath = path.join(
     path.dirname(absPath),
     `.${path.basename(absPath)}.mcp-ship-ready-${randomBytes(6).toString("hex")}.tmp`,
   );
-  writeFileSync(tmpPath, content, "utf8");
-  chmodSync(tmpPath, mode);
-  renameSync(tmpPath, absPath);
+  writeFileSync(tmpPath, content, { encoding: "utf8", flag: "wx", mode });
+  try {
+    chmodSync(tmpPath, mode);
+    renameSync(tmpPath, absPath);
+  } catch (err) {
+    try {
+      unlinkSync(tmpPath);
+    } catch {
+      // best effort — surface the original error either way
+    }
+    throw err;
+  }
 }
 
 /**
@@ -137,7 +157,10 @@ export function planFixes(report: ScanReport, targetRoot: string): FixPlan {
  * refuse non-UTF-8 content (defense in depth — planFixes() already
  * filters this out, but a caller could hand us a hand-built FixPlan);
  * refuse if the file's content changed since planFixes() (hash mismatch);
- * only then write, atomically, preserving the original file's mode.
+ * only then write, atomically, preserving the original file's mode. The
+ * write itself can still fail (e.g. the exclusive-create temp file
+ * colliding with an existing path, or a permissions error) — that's
+ * caught and reported in refusedUnsafe too, never left to crash the run.
  */
 export function applyFixes(plan: FixPlan): ApplyResult {
   const rootReal = realpathSync(plan.target);
@@ -182,8 +205,15 @@ export function applyFixes(plan: FixPlan): ApplyResult {
       continue;
     }
 
-    writeAtomically(path.join(dirReal, path.basename(absPath)), fixContent(current), stat.mode & 0o777);
-    written.push(fix.file);
+    try {
+      writeAtomically(path.join(dirReal, path.basename(absPath)), fixContent(current), stat.mode & 0o777);
+      written.push(fix.file);
+    } catch (err) {
+      // Use err.code, not err.message: Node's fs error messages embed the
+      // full path (including the untrusted file name) we're writing to.
+      const code = (err as NodeJS.ErrnoException).code ?? "unknown error";
+      refusedUnsafe.push({ file: fix.file, reason: `write failed: ${code}` });
+    }
   }
 
   return { ...plan, applied: true, written, driftSkipped, refusedUnsafe };
