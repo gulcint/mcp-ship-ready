@@ -234,3 +234,64 @@ test("planFixes and applyFixes refuse a file that is not valid UTF-8, instead of
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("applyFixes writes the FULL, untruncated content even for a huge line the preview would cut", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "mcp-ship-ready-fixer-huge-line-"));
+  try {
+    mkdirSync(path.join(dir, "src"), { recursive: true });
+    const huge = "x".repeat(1_500_000);
+    const content = `const x = -32002; // ${huge}\n`;
+    writeFileSync(path.join(dir, "src", "server.ts"), content);
+
+    const report = scan(dir);
+    const plan = planFixes(report, dir);
+    assert.equal(plan.fixes[0]?.changes[0]?.before.length, content.trimEnd().length);
+
+    applyFixes(plan);
+
+    const written = readFileSync(path.join(dir, "src", "server.ts"), "utf8");
+    assert.equal(written, content.replace("-32002", "-32602")); // full content, not cut to 200 chars
+    assert.equal(written.length > 1_500_000, true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("Node's wx flag refuses to open a path that already exists (the primitive writeAtomically relies on)", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "mcp-ship-ready-wx-"));
+  try {
+    const target = path.join(dir, "already-there");
+    writeFileSync(target, "original");
+
+    assert.throws(() => writeFileSync(target, "attacker-controlled", { flag: "wx" }), /EEXIST/);
+    assert.equal(readFileSync(target, "utf8"), "original"); // untouched by the failed attempt
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("applyFixes reports (not crashes on) a real write failure and leaves other files unaffected", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "mcp-ship-ready-fixer-writefail-"));
+  try {
+    cpSync(path.join(fixturesDir, "mechanical-only"), dir, { recursive: true });
+    const target = path.join(dir, "src", "server.ts");
+    const before = readFileSync(target, "utf8");
+
+    const plan = planFixes(scan(dir), dir);
+    chmodSync(path.join(dir, "src"), 0o555); // read+execute only — any write inside fails EACCES
+
+    let result;
+    try {
+      result = applyFixes(plan);
+    } finally {
+      chmodSync(path.join(dir, "src"), 0o755); // restore so cleanup can remove it
+    }
+
+    assert.deepEqual(result.written, []);
+    assert.equal(result.refusedUnsafe.length, 1);
+    assert.match(result.refusedUnsafe[0]?.reason ?? "", /write failed/);
+    assert.equal(readFileSync(target, "utf8"), before); // untouched
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

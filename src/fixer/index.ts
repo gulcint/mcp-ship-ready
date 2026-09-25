@@ -72,13 +72,22 @@ function fixContent(content: string): string {
   return Object.values(FIXERS).reduce((current, fix) => fix(current), content);
 }
 
-/** Same-directory temp file + rename — atomic on POSIX, never a partial write. Preserves the original file's permission bits. */
+/**
+ * Same-directory temp file + rename — atomic on POSIX, never a partial
+ * write. `flag: "wx"` creates the temp file exclusively: it refuses to
+ * open (throws EEXIST) if anything — a regular file or a symlink — already
+ * exists at that path, and creates it with the right mode from the start
+ * rather than the process's default/umask mode. `chmodSync` afterward is
+ * kept anyway: the `mode` open option is still subject to umask, so it
+ * alone can't guarantee the original file's exact permission bits survive;
+ * the explicit chmod does, regardless of umask.
+ */
 function writeAtomically(absPath: string, content: string, mode: number): void {
   const tmpPath = path.join(
     path.dirname(absPath),
     `.${path.basename(absPath)}.mcp-ship-ready-${randomBytes(6).toString("hex")}.tmp`,
   );
-  writeFileSync(tmpPath, content, "utf8");
+  writeFileSync(tmpPath, content, { encoding: "utf8", flag: "wx", mode });
   chmodSync(tmpPath, mode);
   renameSync(tmpPath, absPath);
 }
@@ -137,7 +146,10 @@ export function planFixes(report: ScanReport, targetRoot: string): FixPlan {
  * refuse non-UTF-8 content (defense in depth — planFixes() already
  * filters this out, but a caller could hand us a hand-built FixPlan);
  * refuse if the file's content changed since planFixes() (hash mismatch);
- * only then write, atomically, preserving the original file's mode.
+ * only then write, atomically, preserving the original file's mode. The
+ * write itself can still fail (e.g. the exclusive-create temp file
+ * colliding with an existing path, or a permissions error) — that's
+ * caught and reported in refusedUnsafe too, never left to crash the run.
  */
 export function applyFixes(plan: FixPlan): ApplyResult {
   const rootReal = realpathSync(plan.target);
@@ -182,8 +194,12 @@ export function applyFixes(plan: FixPlan): ApplyResult {
       continue;
     }
 
-    writeAtomically(path.join(dirReal, path.basename(absPath)), fixContent(current), stat.mode & 0o777);
-    written.push(fix.file);
+    try {
+      writeAtomically(path.join(dirReal, path.basename(absPath)), fixContent(current), stat.mode & 0o777);
+      written.push(fix.file);
+    } catch (err) {
+      refusedUnsafe.push({ file: fix.file, reason: `write failed: ${(err as Error).message}` });
+    }
   }
 
   return { ...plan, applied: true, written, driftSkipped, refusedUnsafe };
