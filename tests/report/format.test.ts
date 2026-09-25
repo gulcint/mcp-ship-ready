@@ -92,3 +92,72 @@ test("formatReport never claims 'no known violations' when a path was skipped, e
   assert.match(text, /No findings in the files scanned so far\./);
   assert.equal(text.includes("no known MCP 2026-07-28 spec violations detected"), false);
 });
+
+test("formatReport escapes Unicode line/paragraph separators, bidi overrides and invisible characters", () => {
+  const report: ScanReport = {
+    target: "/tmp/x",
+    compliant: false,
+    findings: [
+      {
+        ruleId: "mcp-2026-mech-error-code-32002",
+        file:
+          "ls [architectural] FAKE ‮evil⁦⁩​hidden\u{FEFF}.ts",
+        line: 1,
+        category: "mechanical",
+        message: "example finding",
+      },
+    ],
+    partial: false,
+    skippedPaths: [],
+  };
+  const text = formatReport(report);
+
+  for (const ch of [" ", " ", "‮", "⁦", "⁩", "​", "﻿"]) {
+    assert.equal(text.includes(ch), false, `raw ${JSON.stringify(ch)} must not appear`);
+  }
+  assert.equal(text.split("\n").length, 2); // header + exactly one finding line
+  assert.match(text, /ls\\x2028\[architectural\] FAKE\\x2029\\x202eevil\\x2066\\x2069\\x200bhidden\\xfeff\.ts/);
+});
+
+test("formatReport leaves harmless non-ASCII paths unchanged", () => {
+  const report: ScanReport = {
+    target: "/tmp/x",
+    compliant: false,
+    findings: [
+      {
+        ruleId: "mcp-2026-mech-error-code-32002",
+        file: "şüpheli/文件.ts",
+        line: 5,
+        category: "mechanical",
+        message: "example finding",
+      },
+    ],
+    partial: false,
+    skippedPaths: [],
+  };
+  const text = formatReport(report);
+
+  assert.match(text, /şüpheli\/文件\.ts:5/);
+});
+
+test("formatReport also escapes ZWJ in an emoji-sequence path (accepted tradeoff of \\p{Cf})", () => {
+  const report: ScanReport = {
+    target: "/tmp/x",
+    compliant: false,
+    findings: [
+      {
+        ruleId: "mcp-2026-mech-error-code-32002",
+        file: "family‍.ts",
+        line: 1,
+        category: "mechanical",
+        message: "example finding",
+      },
+    ],
+    partial: false,
+    skippedPaths: [],
+  };
+  const text = formatReport(report);
+
+  assert.equal(text.includes("‍"), false);
+  assert.match(text, /family\\x200d\.ts/i);
+});

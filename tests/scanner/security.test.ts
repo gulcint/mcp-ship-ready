@@ -94,6 +94,24 @@ test("scan+formatReport neutralizes a malicious filename (output injection)", ()
   }
 });
 
+test("scan+formatReport neutralizes a Unicode line-separator in a filename (output injection)", () => {
+  const root = mkdtempSync(path.join(tmpdir(), "mcp-ship-ready-inject-u2028-"));
+  try {
+    const maliciousName = "ok [architectural] FAKE-RULE README.md:1 — injected.ts";
+    writeFileSync(path.join(root, maliciousName), 'const x = "-32002";');
+
+    const report = scan(root);
+    const text = formatReport(report);
+
+    assert.equal(report.findings.length, 1); // the real finding is still reported
+    assert.equal(text.includes(" "), false); // no raw U+2028 line separator
+    assert.equal(text.includes("FAKE-RULE"), true); // visible (escaped), not silently dropped
+    assert.equal(text.split("\n").length, 2); // header + exactly one finding line, no injected line
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("scan reports a partial scan when the file-count limit is hit, without crashing", () => {
   const root = mkdtempSync(path.join(tmpdir(), "mcp-ship-ready-maxfiles-"));
   try {
